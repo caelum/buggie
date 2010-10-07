@@ -16,10 +16,12 @@ class Caelum::Buggie::Iteration
     end.size
   end
   def open_bugs
-    @project.stories.all(:story_type => "bug").select do |s|
-      not_yet_accepted = (s.accepted_at.nil? || s.accepted_at <= @iteration.finish)
-      (s.created_at >= @iteration.start && not_yet_accepted)
+    @project.stories.all.select do |s|
+      s.story_type == "bug" && (s.created_at >= @iteration.start && s.created_at <= @iteration.finish)
     end.size
+  end
+  def name
+    "Iteration #{@iteration.number}"
   end
 end
 class Caelum::Buggie::Iterations
@@ -28,13 +30,42 @@ class Caelum::Buggie::Iterations
     @iterations = p
   end
   def bugs_per_iteration
-    @iterations.inject({}) do |map, i|
-      name = "Iteration #{i.number}"
-      map[name] = {}
-      map[name][:closed_bugs] = Caelum::Buggie::Iteration.new(@project, i).closed_bugs
-      map[name][:open_bugs] = Caelum::Buggie::Iteration.new(@project, i).open_bugs
-      map
+    @iterations.collect do |i|
+      Caelum::Buggie::Iteration.new(@project, i)
     end
+  end
+  
+  def to_html
+    content = '<html>
+      <head>
+        <script type="text/javascript" src="http://www.google.com/jsapi"></script>
+        <script type="text/javascript">
+          google.load("visualization", "1", {packages:["corechart"]});
+          google.setOnLoadCallback(drawChart);
+          function drawChart() {
+            var data = new google.visualization.DataTable();
+            data.addColumn("string", "Iteration");
+            data.addColumn("number", "Opened");
+            data.addColumn("number", "Closed");'
+    bugs = bugs_per_iteration
+    content = content + "data.addRows(#{bugs.size});"
+    i = 0
+    bugs.each do |iteration, v|
+      content = content + "data.setValue(#{i}, 0, '#{iteration.name}');"
+      content = content + "data.setValue(#{i}, 1, #{iteration.open_bugs});"
+      content = content + "data.setValue(#{i}, 2, #{iteration.closed_bugs});"
+      i = i + 1
+    end
+    content = content + "
+            var chart = new google.visualization.LineChart(document.getElementById('chart_div'));
+            chart.draw(data, {width: 640, height: 480, title: 'Overral opened x closed bugs'});
+          }
+        </script>
+      </head>
+      <body>
+        <div id='chart_div'></div>
+      </body>
+    </html>"
   end
 end
 
